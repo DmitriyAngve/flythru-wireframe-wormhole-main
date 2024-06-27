@@ -63,13 +63,15 @@ const tubeLines = new THREE.LineSegments(edges, lineMat);
 scene.add(tubeLines);
 
 // create glowing spheres at the intersactions
-const spheresGeo = new THREE.SphereGeometry(0.1, 32, 32);
-const spheresMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+const sphereGeo = new THREE.SphereGeometry(0.015, 32, 32);
+const sphereMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
 const spheres = [];
-for (let i = 0; i < tubeGeo.parameters.path.points.length; i += 1) {
-  const pos = tubeGeo.parameters.path.points[i];
-  const sphere = new THREE.Mesh(spheresGeo, spheresMat);
-  sphere.position.copy(pos);
+
+const vertices = edges.attributes.position.array;
+
+for (let i = 0; i < vertices.length; i += 3) {
+  const sphere = new THREE.Mesh(sphereGeo, sphereMat);
+  sphere.position.set(vertices[i], vertices[i + 1], vertices[i + 2]);
   scene.add(sphere);
   spheres.push(sphere);
 }
@@ -120,14 +122,14 @@ function animate(t = 0) {
   updateCamera(t);
 
   // Update the color of the tube
-  const hueMat = (t * 0.0001) % 1; // hue value changes over time
-  const hueLines = (t * 0.0002) % 1; // hue value changes over time
-  const hueSphere = (t * 0.0003) % 1;
+  const hueMat = (t * 0.0002) % 1; // hue value changes over time
+  const hueLines = (t * 0.0003) % 1; // hue value changes over time
+  const hueSphere = (t * 0.0004) % 1;
   tubeMat.color.setHSL(hueMat, 1, 0.5); // Update the material color
   tubeLines.material.color.setHSL(hueLines, 1, 0.5);
 
   spheres.forEach((sphere) => {
-    sphere.material.color.setHSL(hueSphere, 1, 0.5);
+    sphere.material.color.setHSL(hueSphere, 1, 0.5); // Update the sphere color
   });
 
   composer.render(scene, camera);
