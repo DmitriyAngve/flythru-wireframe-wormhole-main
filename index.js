@@ -1,6 +1,9 @@
 import * as THREE from "three";
 import { OrbitControls } from "jsm/controls/OrbitControls.js";
 import spline from "./spline.js";
+import { EffectComposer } from "jsm/postprocessing/EffectComposer.js";
+import { RenderPass } from "jsm/postprocessing/RenderPass.js";
+import { UnrealBloomPass } from "jsm/postprocessing/UnrealBloomPass.js";
 
 const w = window.innerWidth;
 const h = window.innerHeight;
@@ -18,6 +21,16 @@ const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.dampingFactor = 0.03;
 
+// post-processing
+const renderScene = new RenderPass(scene, camera);
+const bloomPass = new UnrealBloomPass(new THREE.Vector2(w, h), 1.5, 0.4, 100);
+bloomPass.threshold = 0.002;
+bloomPass.strength = 2.0;
+bloomPass.radius = 0;
+const composer = new EffectComposer(renderer);
+composer.addPass(renderScene);
+composer.addPass(bloomPass);
+
 // Create a line geometry from the spline
 const points = spline.getPoints(100);
 // BufferGeometry - это основной класс для представления геометрических форм в threejs. Используется для хранения points, faces, normals, colors и тд
@@ -26,12 +39,6 @@ const geometry = new THREE.BufferGeometry().setFromPoints(points);
 const material = new THREE.LineBasicMaterial({ color: 0xff0000 });
 const line = new THREE.Line(geometry, material);
 // scene.add(line);
-
-// create edges geometry from the spline
-const edges = new THREE.EdgesGeometry(geometry, 0);
-const lineMat = new THREE.LineBasicMaterial({ color: 0xffffff });
-const tubeLines = new THREE.LineSegments(edges, lineMat);
-scene.add(tubeLines);
 
 // create a tube geometry from the spline
 // 222 - количество сегментов, на которые делится spline
@@ -49,8 +56,53 @@ const tubeMat = new THREE.MeshBasicMaterial({
 const tube = new THREE.Mesh(tubeGeo, tubeMat);
 scene.add(tube);
 
-// const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444);
-// scene.add(hemiLight);
+// create edges geometry from the spline
+const edges = new THREE.EdgesGeometry(tubeGeo, 0.2);
+const lineMat = new THREE.LineBasicMaterial({ color: 0xff0000 });
+const tubeLines = new THREE.LineSegments(edges, lineMat);
+scene.add(tubeLines);
+
+// create glowing spheres at the intersactions
+const spheresGeo = new THREE.SphereGeometry(0.1, 32, 32);
+const spheresMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+const spheres = [];
+for (let i = 0; i < tubeGeo.parameters.path.points.length; i += 1) {
+  const pos = tubeGeo.parameters.path.points[i];
+  const sphere = new THREE.Mesh(spheresGeo, spheresMat);
+  sphere.position.copy(pos);
+  scene.add(sphere);
+  spheres.push(sphere);
+}
+
+const numBoxes = 55;
+const size = 0.075;
+const boxGeo = new THREE.BoxGeometry(size, size, size);
+for (let i = 0; i < numBoxes; i += 1) {
+  const boxMat = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    wireframe: true,
+  });
+  const box = new THREE.Mesh(boxGeo, boxMat);
+  const p = (i / numBoxes + Math.random() * 0.1) % 1;
+  const pos = tubeGeo.parameters.path.getPointAt(p);
+  pos.x += Math.random() - 0.4;
+  pos.z += Math.random() - 0.4;
+  box.position.copy(pos);
+  const rote = new THREE.Vector3(
+    Math.random() * Math.PI,
+    Math.random() * Math.PI,
+    Math.random() * Math.PI
+  );
+  box.rotation.set(rote.x, rote.y, rote.z);
+  const edges = new THREE.EdgesGeometry(boxGeo, 0.2);
+  const color = new THREE.Color().setHSL(0.5 - p, 1, 0.5);
+  const lineMat = new THREE.LineBasicMaterial({ color });
+  const boxLines = new THREE.LineSegments(edges, lineMat);
+  boxLines.position.copy(pos);
+  boxLines.rotation.set(rote.x, rote.y, rote.z);
+  // scene.add(box);
+  scene.add(boxLines);
+}
 
 function updateCamera(t) {
   const time = t * 0.1;
@@ -66,7 +118,19 @@ function animate(t = 0) {
   requestAnimationFrame(animate);
 
   updateCamera(t);
-  renderer.render(scene, camera);
+
+  // Update the color of the tube
+  const hueMat = (t * 0.0001) % 1; // hue value changes over time
+  const hueLines = (t * 0.0002) % 1; // hue value changes over time
+  const hueSphere = (t * 0.0003) % 1;
+  tubeMat.color.setHSL(hueMat, 1, 0.5); // Update the material color
+  tubeLines.material.color.setHSL(hueLines, 1, 0.5);
+
+  spheres.forEach((sphere) => {
+    sphere.material.color.setHSL(hueSphere, 1, 0.5);
+  });
+
+  composer.render(scene, camera);
   controls.update();
 }
 animate();
